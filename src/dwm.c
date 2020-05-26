@@ -40,6 +40,7 @@
 #include <X11/extensions/Xinerama.h>
 #endif /* XINERAMA */
 #include <X11/Xft/Xft.h>
+#include <X11/XKBlib.h>
 
 #include "drw.h"
 #include "util.h"
@@ -56,6 +57,9 @@
 #define HEIGHT(X)               ((X)->h + 2 * (X)->bw)
 #define TAGMASK                 ((1 << LENGTH(tags)) - 1)
 #define TEXTW(X)                (drw_fontset_getwidth(drw, (X)) + lrpad)
+#ifndef VERSION
+#define VERSION "undef"
+#endif
 
 /* enums */
 enum { CurNormal, CurResize, CurMove, CurLast }; /* cursor */
@@ -433,13 +437,13 @@ buttonpress(XEvent *e)
 		i = x = 0;
 		do
 			x += TEXTW(tags[i]);
-		while (ev->x >= x && ++i < LENGTH(tags));
+		while ( (unsigned int)ev->x >= x && ++i < LENGTH(tags));
 		if (i < LENGTH(tags)) {
 			click = ClkTagBar;
 			arg.ui = 1 << i;
-		} else if (ev->x < x + blw)
+		} else if ( (unsigned int)ev->x < x + blw)
 			click = ClkLtSymbol;
-		else if (ev->x > selmon->ww - TEXTW(stext))
+		else if ( (unsigned int)ev->x > selmon->ww - TEXTW(stext))
 			click = ClkStatusText;
 		else
 			click = ClkWinTitle;
@@ -518,8 +522,8 @@ clientmessage(XEvent *e)
 	if (!c)
 		return;
 	if (cme->message_type == netatom[NetWMState]) {
-		if (cme->data.l[1] == netatom[NetWMFullscreen]
-		|| cme->data.l[2] == netatom[NetWMFullscreen])
+		if ((Atom)cme->data.l[1] == netatom[NetWMFullscreen]
+		|| (Atom)cme->data.l[2] == netatom[NetWMFullscreen])
 			setfullscreen(c, (cme->data.l[0] == 1 /* _NET_WM_STATE_ADD    */
 				|| (cme->data.l[0] == 2 /* _NET_WM_STATE_TOGGLE */ && !c->isfullscreen)));
 	} else if (cme->message_type == netatom[NetActiveWindow]) {
@@ -990,7 +994,8 @@ keypress(XEvent *e)
 	XKeyEvent *ev;
 
 	ev = &e->xkey;
-	keysym = XKeycodeToKeysym(dpy, (KeyCode)ev->keycode, 0);
+	//keysym = XKeycodeToKeysym(dpy, (KeyCode)ev->keycode, 0);
+  keysym = XkbKeycodeToKeysym(dpy, (KeyCode)ev->keycode, 0, 0);
 	for (i = 0; i < LENGTH(keys); i++)
 		if (keysym == keys[i].keysym
 		&& CLEANMASK(keys[i].mod) == CLEANMASK(ev->state)
@@ -1001,6 +1006,8 @@ keypress(XEvent *e)
 void
 killclient(const Arg *arg)
 {
+  (void) arg;
+
 	if (!selmon->sel)
 		return;
 	if (!sendevent(selmon->sel, wmatom[WMDelete])) {
@@ -1140,6 +1147,7 @@ movemouse(const Arg *arg)
 	Monitor *m;
 	XEvent ev;
 	Time lasttime = 0;
+  (void) arg;
 
 	if (!(c = selmon->sel))
 		return;
@@ -1248,6 +1256,7 @@ propertynotify(XEvent *e)
 void
 quit(const Arg *arg)
 {
+  (void) arg;
 	running = 0;
 }
 
@@ -1295,6 +1304,7 @@ resizemouse(const Arg *arg)
 	Monitor *m;
 	XEvent ev;
 	Time lasttime = 0;
+  (void) arg;
 
 	if (!(c = selmon->sel))
 		return;
@@ -1568,7 +1578,7 @@ setup(void)
 	cursor[CurMove] = drw_cur_create(drw, XC_fleur);
 	/* init appearance */
 	scheme = ecalloc(LENGTH(colors), sizeof(Clr *));
-	for (i = 0; i < LENGTH(colors); i++)
+	for (i = 0; i < (int)LENGTH(colors); i++)
 		scheme[i] = drw_scm_create(drw, colors[i], 3);
 	/* init bars */
 	updatebars();
@@ -1631,6 +1641,7 @@ showhide(Client *c)
 void
 sigchld(int unused)
 {
+  (void) unused;
 	if (signal(SIGCHLD, sigchld) == SIG_ERR)
 		die("can't install SIGCHLD handler:");
 	while (0 < waitpid(-1, NULL, WNOHANG));
@@ -1680,12 +1691,12 @@ tile(Monitor *m)
 	if (n == 0)
 		return;
 
-	if (n > m->nmaster)
+	if (n > (unsigned int)m->nmaster)
 		mw = m->nmaster ? m->ww * m->mfact : 0;
 	else
 		mw = m->ww;
 	for (i = my = ty = 0, c = nexttiled(m->clients); c; c = nexttiled(c->next), i++)
-		if (i < m->nmaster) {
+		if (i < (unsigned int)m->nmaster) {
 			h = (m->wh - my) / (MIN(n, m->nmaster) - i);
 			resize(c, m->wx, m->wy + my, mw - (2*c->bw), h - (2*c->bw), 0);
 			my += HEIGHT(c);
@@ -1699,6 +1710,7 @@ tile(Monitor *m)
 void
 togglebar(const Arg *arg)
 {
+  (void) arg;
 	selmon->showbar = !selmon->showbar;
 	updatebarpos(selmon);
 	XMoveResizeWindow(dpy, selmon->barwin, selmon->wx, selmon->by, selmon->ww, bh);
@@ -1708,6 +1720,7 @@ togglebar(const Arg *arg)
 void
 togglefloating(const Arg *arg)
 {
+  (void) arg;
 	if (!selmon->sel)
 		return;
 	if (selmon->sel->isfullscreen) /* no support for fullscreen windows */
@@ -1934,7 +1947,7 @@ updatenumlockmask(void)
 	numlockmask = 0;
 	modmap = XGetModifierMapping(dpy);
 	for (i = 0; i < 8; i++)
-		for (j = 0; j < modmap->max_keypermod; j++)
+		for (j = 0; j < (unsigned int)modmap->max_keypermod; j++)
 			if (modmap->modifiermap[i * modmap->max_keypermod + j]
 				== XKeysymToKeycode(dpy, XK_Num_Lock))
 				numlockmask = (1 << i);
@@ -2098,6 +2111,8 @@ xerror(Display *dpy, XErrorEvent *ee)
 int
 xerrordummy(Display *dpy, XErrorEvent *ee)
 {
+  (void) dpy;
+  (void) ee;
 	return 0;
 }
 
@@ -2106,6 +2121,8 @@ xerrordummy(Display *dpy, XErrorEvent *ee)
 int
 xerrorstart(Display *dpy, XErrorEvent *ee)
 {
+  (void) dpy;
+  (void) ee;
 	die("dwm: another window manager is already running");
 	return -1;
 }
@@ -2113,6 +2130,7 @@ xerrorstart(Display *dpy, XErrorEvent *ee)
 void
 zoom(const Arg *arg)
 {
+  (void) arg;
 	Client *c = selmon->sel;
 
 	if (!selmon->lt[selmon->sellt]->arrange
